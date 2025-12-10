@@ -25,6 +25,10 @@ package pascal.taie.analysis.dataflow.solver;
 import pascal.taie.analysis.dataflow.analysis.DataflowAnalysis;
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.graph.cfg.CFG;
+import pascal.taie.analysis.graph.cfg.Edge;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
 
@@ -34,11 +38,59 @@ class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
 
     @Override
     protected void doSolveForward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        // TODO - finish me
+        Deque<Node> workList = new ArrayDeque<>(cfg.getNodes());
+        while (!workList.isEmpty()) {
+            Node node = workList.removeFirst();
+            Fact inFact = result.getInFact(node);
+            if (!cfg.isEntry(node)) {
+                Fact newIn = analysis.newInitialFact();
+                for (Edge<Node> edge : cfg.getInEdgesOf(node)) {
+                    Fact predOut = result.getOutFact(edge.getSource());
+                    Fact edgeFact = analysis.needTransferEdge(edge)
+                            ? analysis.transferEdge(edge, predOut)
+                            : predOut;
+                    analysis.meetInto(edgeFact, newIn);
+                }
+                if (!newIn.equals(inFact)) {
+                    inFact = newIn;
+                    result.setInFact(node, inFact);
+                }
+            }
+            Fact outFact = result.getOutFact(node);
+            boolean changed = analysis.transferNode(node, inFact, outFact);
+            if (changed) {
+                cfg.getOutEdgesOf(node).forEach(edge ->
+                        workList.add(edge.getTarget()));
+            }
+        }
     }
 
     @Override
     protected void doSolveBackward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        throw new UnsupportedOperationException();
+        Deque<Node> workList = new ArrayDeque<>(cfg.getNodes());
+        while (!workList.isEmpty()) {
+            Node node = workList.removeFirst();
+            Fact outFact = result.getOutFact(node);
+            if (!cfg.isExit(node)) {
+                Fact newOut = analysis.newInitialFact();
+                for (Edge<Node> edge : cfg.getOutEdgesOf(node)) {
+                    Fact succIn = result.getInFact(edge.getTarget());
+                    Fact edgeFact = analysis.needTransferEdge(edge)
+                            ? analysis.transferEdge(edge, succIn)
+                            : succIn;
+                    analysis.meetInto(edgeFact, newOut);
+                }
+                if (!newOut.equals(outFact)) {
+                    outFact = newOut;
+                    result.setOutFact(node, outFact);
+                }
+            }
+            Fact inFact = result.getInFact(node);
+            boolean changed = analysis.transferNode(node, outFact, inFact);
+            if (changed) {
+                cfg.getInEdgesOf(node).forEach(edge ->
+                        workList.add(edge.getSource()));
+            }
+        }
     }
 }

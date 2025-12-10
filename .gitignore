@@ -4,3 +4,6 @@ build/
 out/
 output/
 sootOutput/
+.DS_Store
+*.pdf
+*.zip
